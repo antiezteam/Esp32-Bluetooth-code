@@ -1,0 +1,104 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* ssid = "HACK-NET";
+const char* pass = "toor";
+WebServer server(80);
+BLEScan* scanner = 0;
+bool jamActive = 0;
+
+const char* page = R"rawliteral(
+<!DOCTYPE HTML>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{background:#000;color:#0f0;font-family:monospace;margin:20px;}
+.term{background:#111;padding:15px;border:2px solid #0f0;}
+.cmd{color:#ff0;} .red{color:#f00;} .green{color:#0f0;}
+button{background:#333;color:#0f0;border:1px solid #0f0;padding:8px;margin:5px;}
+</style>
+<script>
+function cmd(c){fetch('/'+c)}
+setInterval(()=>{fetch('/stats').then(r=>r.text()).then(d=>{
+document.getElementById('stats').innerHTML=d})},2000)
+</script></head>
+<body>
+<h1 class='green'>[ ESP32 HACK TOOL ]</h1>
+<div id='stats' class='term'></div>
+<br>
+<button onclick="cmd('wscan')">📡 WiFi Scan</button>
+<button onclick="cmd('blejam')" class='red'>🌀 BLE Jam</button>
+<button onclick="cmd('apflood')">🌊 AP Flood</button>
+<button onclick="cmd('beacon')">📶 Beacon Spam</button>
+</body></html>
+)rawliteral";
+
+void handleRoot(){ server.send(200,"text/html",page); }
+
+void handleStats(){
+  String s="root@hack:~# status<br>";
+  int n = WiFi.scanComplete();
+  s+="WiFi: "+(n>=0?String(n):"0")+" networks<br>";
+  s+="BLE: "+(jamActive?"<span class='red'>JAMMING</span>":"IDLE")+"<br>";
+  s+="IP: "+WiFi.softAPIP().toString()+"<br>";
+  s+="Clients: "+String(WiFi.softAPgetStationNum());
+  server.send(200,"text/html",s);
+}
+
+void handleWscan(){
+  WiFi.scanNetworks(true);
+  server.send(200,"text/plain","Scanning...");
+}
+
+void handleBlejam(){
+  jamActive=!jamActive;
+  if(jamActive && !scanner){
+    BLEDevice::init("");
+    scanner=BLEDevice::getScan();
+    scanner->setActiveScan(1);
+    scanner->setInterval(10);
+    scanner->setWindow(9);
+  }
+  server.send(200,"text/plain",jamActive?"BLE Jam: ON":"BLE Jam: OFF");
+}
+
+void handleApflood(){
+  // Создаем 5 фейковых сетей
+  for(int i=0;i<5;i++){
+    char name[20];
+    sprintf(name,"FakeAP_%d",i);
+    WiFi.softAP(name,NULL);
+    delay(100);
+  }
+  server.send(200,"text/plain","Created 5 fake APs");
+}
+
+void handleBeacon(){
+  // Фейковые широковещательные пакеты
+  server.send(200,"text/plain","Sending beacon frames...");
+}
+
+void setup(){
+  WiFi.softAP(ssid,pass);
+  server.on("/",handleRoot);
+  server.on("/stats",handleStats);
+  server.on("/wscan",handleWscan);
+  server.on("/blejam",handleBlejam);
+  server.on("/apflood",handleApflood);
+  server.on("/beacon",handleBeacon);
+  server.begin();
+  pinMode(2,OUTPUT);
+  digitalWrite(2,HIGH);
+}
+
+void loop(){
+  server.handleClient();
+  
+  if(jamActive && scanner){
+    scanner->start(1,false);
+    scanner->clearResults();
+    digitalWrite(2,!digitalRead(2)); // Быстро мигает
+  }
+  delay(10);
+}
