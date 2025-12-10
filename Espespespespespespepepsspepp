@@ -1,0 +1,57 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* s="ESP32";
+const char* p="12345678";
+WebServer sv(80);
+BLEScan* sc=0;
+bool jamming=0;
+
+void hR(){
+  String h="<html><body><h1>ESP32</h1>";
+  int n=WiFi.scanNetworks();
+  h+="<p>Nets:"+String(n)+"</p>";
+  for(int i=0;i<n&&i<3;i++){
+    h+="<p>"+WiFi.SSID(i)+":"+String(WiFi.RSSI(i))+"dB</p>";
+  }
+  h+="<p>BLE:"+(jamming?"ON":"OFF")+"</p>";
+  h+="</body></html>";
+  sv.send(200,"text/html",h);
+  WiFi.scanDelete();
+}
+
+void setup(){
+  WiFi.softAP(s,p);
+  sv.on("/",hR);
+  sv.begin();
+  pinMode(0,INPUT_PULLUP);
+  pinMode(2,OUTPUT);
+}
+
+void loop(){
+  sv.handleClient();
+  
+  if(digitalRead(0)==LOW){
+    delay(50);
+    if(digitalRead(0)==LOW){
+      jamming=!jamming;
+      if(jamming && !sc){
+        BLEDevice::init("");
+        sc=BLEDevice::getScan();
+        sc->setActiveScan(1);
+      }
+      while(digitalRead(0)==LOW){delay(10);}
+    }
+  }
+  
+  if(jamming && sc){
+    sc->start(1,false);
+    sc->clearResults();
+    digitalWrite(2,!digitalRead(2));
+  }else{
+    digitalWrite(2,LOW);
+  }
+  delay(10);
+}
