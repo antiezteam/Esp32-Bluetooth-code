@@ -1,0 +1,226 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+
+// Настройки WiFi
+const char* ssid = "ESP32-Sniffer";
+const char* password = "ramal04198";
+
+WebServer server(80);
+BLEScan* pBLEScan;
+String networkLog = "";
+int packetCount = 0;
+
+// HTML страница
+const char* htmlPage = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial; margin: 20px; background: #0f0f0f; color: #00ff00; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: #00ff00; text-align: center; }
+    .terminal {
+      background: #000; color: #0f0; padding: 20px; border-radius: 10px;
+      height: 400px; overflow-y: auto; font-family: monospace;
+      border: 2px solid #00ff00;
+    }
+    .info { 
+      background: #1a1a1a; padding: 15px; border-radius: 8px; 
+      margin: 15px 0; border-left: 4px solid #00ff00;
+    }
+    .packet { 
+      margin: 5px 0; padding: 8px; background: #111; 
+      border-radius: 4px; border-left: 3px solid #ff5500;
+    }
+    .btn {
+      padding: 10px 20px; margin: 5px; background: #00aa00;
+      color: white; border: none; border-radius: 5px; cursor: pointer;
+    }
+    .btn:hover { background: #00cc00; }
+    .ip { color: #55aaff; }
+    .time { color: #aaaaaa; font-size: 0.9em; }
+  </style>
+  <script>
+    function updateLog() {
+      fetch('/log')
+        .then(r => r.text())
+        .then(data => {
+          document.getElementById('terminal').innerHTML = data;
+          document.getElementById('terminal').scrollTop = 
+            document.getElementById('terminal').scrollHeight;
+        });
+    }
+    
+    function updateStats() {
+      fetch('/stats')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('packets').innerText = data.packets;
+          document.getElementById('devices').innerText = data.devices;
+        });
+    }
+    
+    function clearLog() {
+      if(confirm("Очистить лог?")) {
+        fetch('/clear');
+      }
+    }
+    
+    // Обновляем каждые 2 секунды
+    setInterval(updateLog, 2000);
+    setInterval(updateStats, 3000);
+    window.onload = function() {
+      updateLog();
+      updateStats();
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>📡 ESP32 Network Sniffer</h1>
+    
+    <div class="info">
+      <strong>Сеть:</strong> ESP32-Sniffer<br>
+      <strong>IP:</strong> 192.168.4.1<br>
+      <strong>Статистика:</strong> 
+      Пакетов: <span id="packets">0</span> | 
+      Устройств: <span id="devices">0</span>
+    </div>
+    
+    <div style="text-align: center; margin: 15px 0;">
+      <button class="btn" onclick="updateLog()">🔄 Обновить</button>
+      <button class="btn" onclick="clearLog()">🗑️ Очистить лог</button>
+      <button class="btn" onclick="location.reload()">🔄 Перезагрузить</button>
+    </div>
+    
+    <div id="terminal" class="terminal"></div>
+    
+    <div style="margin-top: 20px; color: #666; text-align: center;">
+      <small>ESP32 Network Monitor v1.0 | Active scanning...</small>
+    </div>
+  </div>
+</body>
+</html>
+)rawliteral";
+
+// Структура для устройств
+struct DeviceInfo {
+  String address;
+  int rssi;
+  unsigned long lastSeen;
+};
+
+DeviceInfo bleDevices[50];
+int deviceCount = 0;
+
+// Callback для BLE устройств
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      packetCount++;
+      String address = advertisedDevice.getAddress().toString();
+      int rssi = advertisedDevice.getRSSI();
+      
+      // Добавляем в лог
+      String logEntry = "<div class='packet'>";
+      logEntry += "<span class='time'>[" + String(millis()/1000) + "s]</span> ";
+      logEntry += "<span class='ip'>" + address + "</span> ";
+      logEntry += "RSSI: " + String(rssi) + "dBm | ";
+      logEntry += "Services: " + String(advertisedDevice.getServiceUUIDCount());
+      logEntry += "</div>";
+      
+      networkLog = logEntry + networkLog;
+      if(networkLog.length() > 5000) networkLog = networkLog.substring(0, 5000);
+      
+      // Сохраняем устройство
+      bool found = false;
+      for(int i = 0; i < deviceCount; i++) {
+        if(bleDevices[i].address == address) {
+          bleDevices[i].rssi = rssi;
+          bleDevices[i].lastSeen = millis();
+          found = true;
+          break;
+        }
+      }
+      
+      if(!found && deviceCount < 50) {
+        bleDevices[deviceCount].address = address;
+        bleDevices[deviceCount].rssi = rssi;
+        bleDevices[deviceCount].lastSeen = millis();
+        deviceCount++;
+      }
+    }
+};
+
+// Обработчики веб-сервера
+void handleRoot() {
+  server.send(200, "text/html", htmlPage);
+}
+
+void handleLog() {
+  server.send(200, "text/html", networkLog);
+}
+
+void handleStats() {
+  String json = "{";
+  json += "\"packets\":" + String(packetCount) + ",";
+  json += "\"devices\":" + String(deviceCount);
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleClear() {
+  networkLog = "";
+  packetCount = 0;
+  deviceCount = 0;
+  server.send(200, "text/plain", "Log cleared");
+}
+
+void handleScan() {
+  server.send(200, "text/plain", "Scanning...");
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  // WiFi точка доступа
+  WiFi.softAP(ssid, password);
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
+  
+  // Инициализация BLE сканера
+  BLEDevice::init("ESP32-Sniffer");
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true);
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);
+  
+  // Веб-сервер
+  server.on("/", handleRoot);
+  server.on("/log", handleLog);
+  server.on("/stats", handleStats);
+  server.on("/clear", handleClear);
+  server.on("/scan", handleScan);
+  server.begin();
+  
+  Serial.println("Network sniffer started");
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+}
+
+void loop() {
+  server.handleClient();
+  
+  // Постоянное сканирование BLE
+  BLEScanResults* results = pBLEScan->start(3, false);
+  if(results) {
+    pBLEScan->clearResults();
+  }
+  
+  delay(100);
+}
