@@ -1,0 +1,71 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "ESP32-Miner";
+const char* pass = "12345678";
+WebServer server(80);
+
+float fakeHashrate = 0;
+float fakeCoins = 0;
+
+const char* page = R"rawliteral(
+<!DOCTYPE HTML>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Arial;background:#000;color:#0f0;}
+.miner{background:#111;padding:20px;border:2px solid #0f0;}
+.coin{color:#ff0;font-size:24px;}
+</style>
+<script>
+function update(){fetch('/data').then(r=>r.text()).then(d=>{
+document.getElementById('stats').innerHTML=d;})}
+setInterval(update,2000);
+</script></head>
+<body>
+<h1>ESP32 Miner</h1>
+<div id="stats" class="miner">Loading...</div>
+<button onclick="update()">Refresh</button>
+</body></html>
+)rawliteral";
+
+void handleRoot() {
+  server.send(200, "text/html", page);
+}
+
+void handleData() {
+  // Фейковые расчеты
+  fakeHashrate = 1000 + random(500);
+  fakeCoins += 0.000001;
+  
+  String data = "<h2>⚡ Mining Stats</h2>";
+  data += "<p>Hashrate: " + String(fakeHashrate) + " H/s</p>";
+  data += "<p class='coin'>Coins: " + String(fakeCoins, 6) + " BTC</p>";
+  data += "<p>Temp: " + String(random(40, 70)) + "°C</p>";
+  data += "<p>Power: " + String(random(5, 10)) + "W</p>";
+  
+  server.send(200, "text/html", data);
+}
+
+void setup() {
+  WiFi.softAP(ssid, pass);
+  server.on("/", handleRoot);
+  server.on("/data", handleData);
+  server.begin();
+  
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH); // "Майнинг" включен
+}
+
+void loop() {
+  server.handleClient();
+  
+  // Мигаем как "работает"
+  digitalWrite(2, !digitalRead(2));
+  delay(500);
+  
+  // Фейковые вычисления (просто нагрузка CPU)
+  for(int i=0; i<10000; i++) {
+    int x = random(1000);
+  }
+}
