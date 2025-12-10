@@ -1,0 +1,43 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "ESP32-Scanner";
+const char* password = "12345678";
+
+WebServer server(80);
+
+void handleRoot() {
+  String html = "<html><body>";
+  html += "<h1>WiFi Scanner</h1>";
+  
+  // Сканируем сети
+  int n = WiFi.scanNetworks();
+  html += "<p>Found: " + String(n) + " networks</p>";
+  
+  for(int i=0; i<n; i++) {
+    html += "<p>";
+    html += WiFi.SSID(i) + " | ";
+    html += "Signal: " + String(WiFi.RSSI(i)) + "dBm | ";
+    html += "Channel: " + String(WiFi.channel(i));
+    html += "</p>";
+  }
+  
+  html += "</body></html>";
+  server.send(200, "text/html", html);
+  
+  // Очищаем результаты сканирования
+  WiFi.scanDelete();
+}
+
+void setup() {
+  WiFi.softAP(ssid, password);
+  server.on("/", handleRoot);
+  server.begin();
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+}
+
+void loop() {
+  server.handleClient();
+  delay(10);
+}
