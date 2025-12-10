@@ -1,0 +1,71 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* s="ESP32";
+const char* p="12345678";
+
+WebServer sv(80);
+BLEScan* sc;
+
+void hR(){
+  String h="<html><body style='background:#000;color:#0f0;'>";
+  
+  // WiFi scan
+  int n=WiFi.scanNetworks();
+  h+="<p>WiFi:"+String(n)+" nets</p>";
+  for(int i=0;i<n&&i<3;i++){
+    h+="<p>"+WiFi.SSID(i)+":"+String(WiFi.RSSI(i))+"dBm</p>";
+  }
+  
+  // Status
+  h+="<p>BLE Jammer: ON</p>";
+  h+="<p>FakeAPs: 5 networks</p>";
+  
+  h+="</body></html>";
+  sv.send(200,"text/html",h);
+  WiFi.scanDelete();
+}
+
+void setup(){
+  // Основная сеть
+  WiFi.softAP(s,p);
+  
+  // 5 фейковых сетей (максимум)
+  WiFi.softAP("FreeWiFi",NULL);
+  delay(10);
+  WiFi.softAP("PublicNET",NULL);
+  delay(10);
+  WiFi.softAP("GuestWiFi",NULL);
+  delay(10);
+  WiFi.softAP("OpenNetwork",NULL);
+  delay(10);
+  WiFi.softAP("HotSpot",NULL);
+  delay(10);
+  
+  // BLE глушилка
+  BLEDevice::init("");
+  sc=BLEDevice::getScan();
+  sc->setActiveScan(1);
+  sc->setInterval(5);
+  sc->setWindow(4);
+  
+  // Веб сервер
+  sv.on("/",hR);
+  sv.begin();
+  
+  pinMode(2,OUTPUT);
+  digitalWrite(2,HIGH);
+}
+
+void loop(){
+  sv.handleClient();
+  
+  // BLE глушение
+  sc->start(1,false);
+  sc->clearResults();
+  digitalWrite(2,!digitalRead(2));
+  
+  delay(10);
+}
