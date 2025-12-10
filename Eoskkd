@@ -1,0 +1,11 @@
+// ТЕСТ 1: Самый минимальный - только подключение библиотеки
+#include <BLEDevice.h>
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Testing BLE...");
+}
+
+void loop() {
+  delay(1000);
+}
