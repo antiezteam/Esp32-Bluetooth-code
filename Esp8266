@@ -1,0 +1,33 @@
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+void setup() {
+  // Настройка светодиода (красный - пин 2)
+  pinMode(2, OUTPUT);
+  digitalWrite(2, LOW); // Выключен
+  
+  // Ждем нажатия BOOT кнопки (GPIO0)
+  pinMode(0, INPUT_PULLUP);
+  
+  // Ждем пока нажмут BOOT
+  while(digitalRead(0) == HIGH) {
+    delay(10);
+  }
+  
+  // Включаем красный светодиод
+  digitalWrite(2, HIGH);
+  
+  // Запускаем Bluetooth глушилку
+  BLEDevice::init("");
+  BLEScan* scanner = BLEDevice::getScan();
+  scanner->setActiveScan(true);
+  scanner->setInterval(10);
+  scanner->setWindow(9);
+}
+
+void loop() {
+  // Непрерывно глушим Bluetooth
+  BLEDevice::getScan()->start(1, false);
+  BLEDevice::getScan()->clearResults();
+  // Без задержки для максимального эффекта
+}
