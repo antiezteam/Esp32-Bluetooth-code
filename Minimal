@@ -1,0 +1,41 @@
+#include <BLEDevice.h>
+#include <BLEScan.h>
+#include <WiFi.h>
+
+const char* ssid = "ESP32-Jammer";
+const char* password = "ramal04198";
+
+BLEScan* scanner;
+int devices = 0;
+
+class JammerCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice device) {
+      devices++;
+    }
+};
+
+void setup() {
+  Serial.begin(115200);
+  
+  // WiFi точка доступа
+  WiFi.softAP(ssid, password);
+  
+  // BLE сканирование
+  BLEDevice::init("Jammer");
+  scanner = BLEDevice::getScan();
+  scanner->setAdvertisedDeviceCallbacks(new JammerCallbacks());
+  scanner->setActiveScan(true);
+  scanner->setInterval(30);
+  scanner->setWindow(29);
+}
+
+void loop() {
+  // Непрерывное сканирование для помех
+  BLEScanResults* results = scanner->start(3, false);
+  
+  if (results) {
+    scanner->clearResults();
+  }
+  
+  delay(50);
+}
