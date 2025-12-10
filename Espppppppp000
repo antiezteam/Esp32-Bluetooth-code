@@ -1,0 +1,35 @@
+here#include <WiFi.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* ssid = "ESP32-Jammer";
+const char* password = "ramal04198";
+
+void setup() {
+  // 1. Включаем WiFi точку доступа
+  WiFi.softAP(ssid, password);
+  
+  // 2. Включаем Bluetooth "глушилку"
+  BLEDevice::init("Jammer");
+  BLEScan* scanner = BLEDevice::getScan();
+  scanner->setActiveScan(true);       // АКТИВНОЕ сканирование - создает помехи!
+  scanner->setInterval(30);           // Очень частые запросы
+  scanner->setWindow(29);             // Почти непрерывно
+  
+  // 3. Мигаем светодиодом 3 раза (сигнал что работает)
+  pinMode(2, OUTPUT);
+  for(int i=0; i<3; i++) {
+    digitalWrite(2, HIGH);
+    delay(100);
+    digitalWrite(2, LOW);
+    delay(100);
+  }
+  digitalWrite(2, HIGH); // Оставляем включенным
+}
+
+void loop() {
+  // НЕПРЕРЫВНОЕ сканирование - создает помехи Bluetooth устройствам
+  BLEScanResults* results = BLEDevice::getScan()->start(1, false);
+  BLEDevice::getScan()->clearResults();
+  delay(10); // Минимальная задержка
+}
