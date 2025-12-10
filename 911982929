@@ -1,0 +1,12 @@
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+void setup() {
+  BLEDevice::init("");
+  BLEDevice::getScan()->setActiveScan(true);
+}
+
+void loop() {
+  BLEDevice::getScan()->start(1, false);
+  BLEDevice::getScan()->clearResults();
+}
