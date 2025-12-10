@@ -1,0 +1,78 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* ssid = "ESP32-Spy";
+const char* password = "ramal04198";
+
+WebServer server(80);
+String logText = "";
+
+// Минимальный сайт
+const char* htmlPage = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Arial;margin:20px;background:#000;color:#0f0;}
+.log{background:#111;color:#0f0;padding:15px;height:300px;overflow:auto;}
+</style>
+<script>
+function update(){fetch('/log').then(r=>r.text()).then(t=>{
+document.getElementById('log').innerHTML=t;})}
+setInterval(update,2000);
+</script></head>
+<body>
+<h1>ESP32 Monitor</h1>
+<div id="log" class="log"></div>
+<button onclick="update()">Refresh</button>
+</body></html>
+)rawliteral";
+
+// Callback для BLE устройств
+class MyCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice device) {
+      String entry = "[" + String(millis()/1000) + "s] ";
+      entry += device.getAddress().toString();
+      entry += " RSSI:" + String(device.getRSSI());
+      entry += "<br>";
+      logText = entry + logText;
+      if(logText.length() > 1500) logText = logText.substring(0, 1500);
+    }
+};
+
+void handleRoot() {
+  server.send(200, "text/html", htmlPage);
+}
+
+void handleLog() {
+  server.send(200, "text/html", logText);
+}
+
+void setup() {
+  // WiFi точка доступа
+  WiFi.softAP(ssid, password);
+  
+  // BLE сканер
+  BLEDevice::init("");
+  BLEScan* scan = BLEDevice::getScan();
+  scan->setAdvertisedDeviceCallbacks(new MyCallbacks());
+  scan->setActiveScan(true);
+  
+  // Веб-сервер
+  server.on("/", handleRoot);
+  server.on("/log", handleLog);
+  server.begin();
+  
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+}
+
+void loop() {
+  server.handleClient();
+  
+  // Сканируем BLE
+  BLEDevice::getScan()->start(2, false);
+  BLEDevice::getScan()->clearResults();
+  delay(100);
+}
