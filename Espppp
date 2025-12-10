@@ -1,0 +1,19 @@
+#include <WiFi.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+const char* ssid = "ESP32-Jammer";
+const char* password = "ramal04198";
+
+void setup() {
+  WiFi.softAP(ssid, password);
+  
+  BLEDevice::init("");
+  BLEScan* s = BLEDevice::getScan();
+  s->setActiveScan(true);
+}
+
+void loop() {
+  BLEScanResults* r = BLEDevice::getScan()->start(1, false);
+  BLEDevice::getScan()->clearResults();
+}
