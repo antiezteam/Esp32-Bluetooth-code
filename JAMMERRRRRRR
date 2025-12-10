@@ -1,0 +1,19 @@
+#include <BLEDevice.h>
+#include <BLEScan.h>
+
+void setup() {
+  BLEDevice::init("");
+  BLEScan* scan = BLEDevice::getScan();
+  scan->setActiveScan(true);
+  scan->setInterval(10);    // Очень часто
+  scan->setWindow(9);       // Почти постоянно
+}
+
+void loop() {
+  // Непрерывное сканирование БЕЗ задержек
+  BLEScanResults* results = BLEDevice::getScan()->start(1, false);
+  if(results) {
+    BLEDevice::getScan()->clearResults();
+  }
+  // Без delay() - максимально агрессивно!
+}
