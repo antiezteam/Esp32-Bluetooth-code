@@ -1,0 +1,73 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+#include <WiFi.h>
+
+// Настройки WiFi
+const char* ssid = "ESP32-Jammer";
+const char* password = "ramal04198";
+
+// Bluetooth
+BLEScan* pBLEScan;
+int scanTime = 5; // Сканировать 5 секунд
+
+// Счетчик устройств
+int devicesFound = 0;
+
+// Класс для обработки найденных BLE устройств
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      devicesFound++;
+      Serial.print("Найдено BLE устройство: ");
+      Serial.println(advertisedDevice.getAddress().toString().c_str());
+    }
+};
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("\n=== ESP32 Bluetooth Jammer ===\n");
+  Serial.println("Запуск...");
+  
+  // Запускаем WiFi точку доступа
+  WiFi.softAP(ssid, password);
+  Serial.print("WiFi запущен: ");
+  Serial.println(ssid);
+  Serial.print("Пароль: ");
+  Serial.println(password);
+  Serial.print("IP адрес: ");
+  Serial.println(WiFi.softAPIP());
+  
+  // Инициализация BLE
+  BLEDevice::init("ESP32-Jammer");
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true);  // Активное сканирование для создания помех
+  pBLEScan->setInterval(50);      // Быстрый интервал для больших помех
+  pBLEScan->setWindow(49);        // Почти непрерывное сканирование
+  
+  Serial.println("\nГлушение Bluetooth запущено автоматически!");
+  Serial.println("WiFi для подключения:");
+  Serial.println("SSID: " + String(ssid));
+  Serial.println("Пароль: " + String(password));
+  Serial.println("IP: " + WiFi.softAPIP().toString());
+}
+
+void loop() {
+  // Непрерывное сканирование для создания помех
+  BLEScanResults* scanResults = pBLEScan->start(scanTime, false);
+  
+  if (scanResults) {
+    Serial.print("Цикл сканирования завершен. Найдено устройств: ");
+    Serial.println(devicesFound);
+    devicesFound = 0; // Сброс счетчика
+  }
+  
+  // Очистка результатов
+  pBLEScan->clearResults();
+  
+  // Минимальная задержка между сканированиями
+  delay(100);
+}
